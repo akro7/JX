@@ -1,13 +1,13 @@
 name: AKRO GOXI Telegram Bot
 
 # GitHub Actions can't run a true 24/7 process for free, so this workflow
-# re-triggers itself every 5 minutes and polls Telegram for ~4.5 minutes
+# re-triggers itself every 6 hours and polls Telegram for ~5.5 hours
 # each run. It's the same "poor man's always-on bot" trick used for the
 # opencode.ai/zen bot before — good enough for a low-traffic key bot.
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "0 */6 * * *"
   workflow_dispatch: {}
 
 concurrency:
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           SITE_API_URL: ${{ secrets.SITE_API_URL }}
           BOT_API_SECRET: ${{ secrets.BOT_API_SECRET }}
-          POLL_SECONDS: "270"
+          POLL_SECONDS: "19800"
         run: python telegram-bot/bot.py
 
       - name: Persist bot state (offset + sessions)
