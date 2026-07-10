@@ -50,8 +50,19 @@ def tg_call(method, params=None, timeout=35):
     url = f"{TELEGRAM_API}/{method}"
     body = json.dumps(params or {}).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode()
+        except Exception:
+            err_body = ""
+        print(f"[tg_call:{method}] HTTP {e.code}: {err_body}")
+        return {"ok": False, "error_code": e.code, "description": err_body}
+    except Exception as e:
+        print(f"[tg_call:{method}] error: {e}")
+        return {"ok": False, "error_code": 0, "description": str(e)}
 
 
 def api_call(path, method="GET", data=None):
@@ -67,11 +78,18 @@ def api_call(path, method="GET", data=None):
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
+        raw = ""
         try:
-            return json.loads(e.read().decode())
+            raw = e.read().decode()
+        except Exception:
+            pass
+        print(f"[api_call:{path}] HTTP {e.code}: {raw[:500]}")
+        try:
+            return json.loads(raw)
         except Exception:
             return {"success": False, "error": f"HTTP {e.code}"}
     except Exception as e:
+        print(f"[api_call:{path}] error: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -145,7 +163,6 @@ def confirm_menu(chat_id, sess, edit_message_id=None):
     dur_label = dict(DURATIONS).get(sess["duration"], str(sess["duration"]))
     text = (
         "📝 *تأكيد الطلب*\n\n"
-        f"👤 اليوزر: `{sess['username']}`\n"
         f"🎮 اللعبة: {game_label}\n"
         f"⏱ المدة: {dur_label}\n"
         f"📱 الأجهزة: {sess['devices']}\n\n"
@@ -162,7 +179,6 @@ def confirm_menu(chat_id, sess, edit_message_id=None):
 
 def do_generate(chat_id, sess):
     res = api_call("generate", "POST", {
-        "username": sess["username"],
         "game": sess["game"],
         "duration": sess["duration"],
         "max_devices": sess["devices"],
@@ -194,12 +210,8 @@ def handle_callback(update, sessions):
         return
 
     if data == "menu:generate":
-        if not sess.get("username"):
-            sess["step"] = "await_username_for_generate"
-            send(chat_id, "اكتب اليوزر بتاعك في الموقع:", edit_message_id=msg_id)
-        else:
-            sess["step"] = None
-            game_menu(chat_id, msg_id)
+        sess["step"] = None
+        game_menu(chat_id, msg_id)
         return
 
     if data == "menu:status":
@@ -269,12 +281,6 @@ def handle_message(update, sessions):
         return
 
     step = sess.get("step")
-
-    if step == "await_username_for_generate":
-        sess["username"] = text
-        sess["step"] = None
-        game_menu(chat_id)
-        return
 
     if step == "await_username_for_balance":
         sess["username"] = text
