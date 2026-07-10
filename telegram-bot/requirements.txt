@@ -1,0 +1,2 @@
+# bot.py uses only Python's standard library (urllib, json) — no external
+# dependencies needed. This file is kept for future extensions.
