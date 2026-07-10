@@ -97,10 +97,31 @@ def send(chat_id, text, keyboard=None, edit_message_id=None):
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
     if keyboard is not None:
         payload["reply_markup"] = {"inline_keyboard": keyboard}
+
+    method = "editMessageText" if edit_message_id else "sendMessage"
     if edit_message_id:
         payload["message_id"] = edit_message_id
-        return tg_call("editMessageText", payload)
-    return tg_call("sendMessage", payload)
+
+    result = tg_call(method, payload)
+
+    if not result.get("ok"):
+        # most common cause: legacy Markdown parser choked on the text.
+        # retry once as plain text so the user still gets *something*.
+        print(f"[send] {method} failed, retrying without markdown: {result}")
+        payload.pop("parse_mode", None)
+        result = tg_call(method, payload)
+
+    if not result.get("ok") and edit_message_id:
+        # editing an old/too-far-back message can fail outright — fall
+        # back to a brand new message so nothing gets silently dropped.
+        print(f"[send] edit failed too, sending as new message: {result}")
+        payload.pop("message_id", None)
+        result = tg_call("sendMessage", payload)
+
+    if not result.get("ok"):
+        print(f"[send] giving up on this message: {result}")
+
+    return result
 
 
 def answer_callback(callback_id, text=None):
@@ -183,6 +204,7 @@ def do_generate(chat_id, sess):
         "duration": sess["duration"],
         "max_devices": sess["devices"],
     })
+    print(f"[do_generate] site response: {res}")
     if res.get("success"):
         send(chat_id, (
             "✅ *تم التوليد*\n\n"
